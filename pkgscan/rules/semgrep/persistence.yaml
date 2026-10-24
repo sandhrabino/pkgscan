@@ -1,0 +1,80 @@
+# Signal 5.7 - Persistence Mechanisms
+rules:
+  - id: persist-cron
+    languages: [regex]
+    severity: ERROR
+    message: Cron job creation
+    metadata: {category: persistence, signal: "5.7"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?:crontab\s+(?:-l|-e|-|\S+\.(?:txt|cron))|/etc/cron(?:\.d|tab|\.daily|\.hourly)|/var/spool/cron)
+
+  - id: persist-systemd
+    languages: [regex]
+    severity: ERROR
+    message: systemd service installation
+    metadata: {category: persistence, signal: "5.7"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?:systemctl\s+(?:--user\s+)?(?:enable|daemon-reload)|/etc/systemd/system/|\.config/systemd/user/|/etc/init\.d/|/etc/rc\.local)
+
+  - id: persist-launchd
+    languages: [regex]
+    severity: ERROR
+    message: macOS LaunchAgent / LaunchDaemon
+    metadata: {category: persistence, signal: "5.7"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?:Library/LaunchAgents|Library/LaunchDaemons|launchctl\s+(?:load|bootstrap|submit))
+
+  - id: persist-windows
+    languages: [regex]
+    severity: ERROR
+    message: Windows scheduled task / service / Run key
+    metadata: {category: persistence, signal: "5.7"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?i)(?:schtasks(?:\.exe)?\s+/create|\bat\s+\d{1,2}:\d{2}\s|New-Service\b|New-ScheduledTask|Register-ScheduledTask|sc(?:\.exe)?\s+create\s|(?:HKCU|HKLM|HKEY_CURRENT_USER|HKEY_LOCAL_MACHINE)\\\\+Software\\\\+Microsoft\\\\+Windows\\\\+CurrentVersion\\\\+Run|Start Menu\\\\+Programs\\\\+Startup)
+
+  - id: persist-shell-profile
+    languages: [regex]
+    severity: ERROR
+    message: Shell profile modification
+    metadata: {category: persistence, signal: "5.7"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?m)^(?!\s*(?://|/\*|\*|#))[^\n]*?(?:["'/\\]\.(?:bashrc|bash_profile|zshrc|zprofile|profile|zshenv|config/fish/config\.fish)\b|/etc/profile(?:\.d)?|PowerShell_profile\.ps1|Microsoft\.PowerShell_profile)
+
+  - id: persist-system-dirs
+    languages: [regex]
+    severity: ERROR
+    message: Writes to system binary directories
+    metadata: {category: persistence, signal: "5.7"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?i)(?:(?:cp|mv|install|tee|>)\s+[^\n]{0,80}/usr/(?:local/)?s?bin/|writeFileSync\(\s*["'`]/usr/(?:local/)?s?bin/|C:\\\\+Windows\\\\+System32\\\\+[^"'\s]+\.(?:exe|dll))
+
+  - id: persist-path-hijack
+    languages: [regex]
+    severity: WARNING
+    message: PATH modification (command hijacking)
+    metadata: {category: persistence, signal: "5.7"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?:export\s+PATH=["']?(?!\$PATH)[^\n]*:\$PATH|process\.env\.PATH\s*=\s*[^\n;]*\+\s*process\.env\.PATH|setx\s+PATH)
+
+  - id: persist-ci-workflow
+    languages: [regex]
+    severity: ERROR
+    message: Writes GitHub Actions workflows from package code (Shai-Hulud style persistence)
+    metadata: {category: persistence, signal: "5.7"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*", "*.yml", "*.yaml"]}
+    pattern-regex: \.github[/\\\\]+workflows[/\\\\]+
+
+  - id: js-write-shell-profile
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Appends to a shell profile file
+    metadata: {category: persistence, signal: "5.7"}
+    patterns:
+      - pattern-either:
+          - pattern: $FS.appendFileSync($P, ...)
+          - pattern: $FS.writeFileSync($P, ...)
+          - pattern: $FS.appendFile($P, ...)
+      - metavariable-pattern:
+          metavariable: $P
+          patterns:
+            - pattern-regex: (bashrc|zshrc|bash_profile|\.profile|LaunchAgents|crontab|systemd)

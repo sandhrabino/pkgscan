@@ -1,0 +1,25 @@
+{
+  "_comment": "Known-bad indicators. Extend from threat-intel feeds/blogs. Package entries are 'name@version' or bare 'name' (all versions).",
+  "npm_packages": [
+    "event-stream@3.3.6",
+    "flatmap-stream@0.1.1",
+    "ua-parser-js@0.7.29",
+    "ua-parser-js@0.8.0",
+    "ua-parser-js@1.0.0",
+    "coa@2.0.3",
+    "rc@1.2.9",
+    "node-ipc@10.1.1",
+    "node-ipc@10.1.2",
+    "chalk@5.6.1",
+    "debug@4.4.2",
+    "ansi-styles@6.2.2"
+  ],
+  "pypi_packages": [
+    "ultralytics@8.3.41",
+    "ultralytics@8.3.42"
+  ],
+  "sha256": [],
+  "domains": ["npmjs.help"],
+  "ips": [],
+  "wallets": []
+}

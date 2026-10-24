@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pkgscan"
+version = "0.1.0"
+description = "Malicious npm / PyPI package scanner: signal producers + Semgrep/YARA + Claude correlation"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31",
+    "PyYAML>=6.0",
+    "yara-python>=4.5",
+    "semantic-version>=2.10",
+    "packaging>=23.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+pkgscan = "pkgscan.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["pkgscan*"]
+
+[tool.setuptools.package-data]
+pkgscan = ["default_config.yaml", "data/*", "rules/semgrep/*.yaml", "rules/yara/*.yar"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

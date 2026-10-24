@@ -1,0 +1,89 @@
+# Signal 5.1 - Code Obfuscation Detection
+rules:
+  - id: js-base64-decode
+    languages: [javascript, typescript]
+    severity: INFO
+    message: Base64 decoding call
+    metadata: {category: obfuscation, signal: "5.1"}
+    pattern-either:
+      - pattern: atob(...)
+      - pattern: Buffer.from($X, "base64")
+      - pattern: new Buffer($X, "base64")
+
+  - id: js-hex-decode
+    languages: [javascript, typescript]
+    severity: INFO
+    message: Hex decoding call
+    metadata: {category: obfuscation, signal: "5.1"}
+    pattern-either:
+      - pattern: Buffer.from($X, "hex")
+      - pattern: String.fromCharCode(parseInt($X, 16))
+
+  - id: py-base64-decode
+    languages: [python]
+    severity: INFO
+    message: Base64 decoding call
+    metadata: {category: obfuscation, signal: "5.1"}
+    pattern-either:
+      - pattern: base64.b64decode(...)
+      - pattern: base64.b32decode(...)
+      - pattern: base64.b85decode(...)
+      - pattern: base64.urlsafe_b64decode(...)
+      - pattern: codecs.decode($X, "base64")
+
+  - id: py-hex-decode
+    languages: [python]
+    severity: INFO
+    message: Hex decoding call
+    metadata: {category: obfuscation, signal: "5.1"}
+    pattern-either:
+      - pattern: bytes.fromhex(...)
+      - pattern: binascii.unhexlify(...)
+      - pattern: codecs.decode($X, "hex")
+
+  - id: js-eval-string-concat
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: String concatenation evaluated as code
+    metadata: {category: obfuscation, signal: "5.1"}
+    pattern-either:
+      - pattern: eval($A + $B)
+      - pattern: new Function(..., $A + $B)
+      - pattern: Function(..., $A + $B)
+      - pattern: eval($ARR.join(...))
+      - pattern: eval($S.split(...).reverse().join(...))
+
+  - id: py-exec-string-concat
+    languages: [python]
+    severity: ERROR
+    message: String concatenation evaluated as code
+    metadata: {category: obfuscation, signal: "5.1"}
+    pattern-either:
+      - pattern: exec($A + $B)
+      - pattern: eval($A + $B)
+      - pattern: exec("".join(...))
+      - pattern: exec($S[::-1])
+
+  - id: js-nested-decode
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Nested decoding (decode inside decode)
+    metadata: {category: obfuscation, signal: "5.1"}
+    pattern-either:
+      - pattern: atob(atob(...))
+      - pattern: Buffer.from(Buffer.from($X, "base64").toString(...), "base64")
+      - pattern: zlib.inflateSync(Buffer.from($X, "base64"))
+      - pattern: zlib.gunzipSync(Buffer.from($X, "base64"))
+
+  - id: py-nested-decode
+    languages: [python]
+    severity: WARNING
+    message: Nested decoding / compressed payload
+    metadata: {category: obfuscation, signal: "5.1"}
+    pattern-either:
+      - pattern: base64.b64decode(base64.b64decode(...))
+      - pattern: zlib.decompress(base64.b64decode(...))
+      - pattern: zlib.decompress(base64.b64decode(...)[::-1])
+      - pattern: lzma.decompress(base64.b64decode(...))
+      - pattern: marshal.loads(zlib.decompress(...))
+      - pattern: marshal.loads(base64.b64decode(...))

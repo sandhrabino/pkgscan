@@ -1,0 +1,103 @@
+# pkgscan default configuration. Override any key with --config <file> or PKGSCAN_CONFIG.
+
+registries:
+  npm:
+    primary: https://registry.npmjs.org
+    # Tried in order when a package/version is missing from the primary (e.g. unpublished).
+    mirrors:
+      - https://registry.npmmirror.com
+    downloads_api: https://api.npmjs.org/downloads/point/last-week
+  pypi:
+    primary: https://pypi.org
+    mirrors:
+      - https://pypi.tuna.tsinghua.edu.cn
+    stats_api: https://pypistats.org/api/packages
+
+scan:
+  # Only direct dependencies are scanned by default; lockfiles are used to pin their versions.
+  include_transitive: false
+  # Dependencies declared as URL/git/file specs bypass registry scanning (PhantomRaven RDD).
+  # List "ecosystem:name" entries here to allow them; anything else is reported as high.
+  allow_url_deps: []
+  state_file: .pkgscan/state.json
+  max_parallel_packages: 3
+  max_parallel_producers: 8
+  # Re-use a previous verdict for the same ecosystem:name@version found in state.
+  reuse_cached_verdicts: true
+
+limits:
+  http_timeout: 20
+  max_download_bytes: 150000000
+  max_extracted_bytes: 600000000
+  max_files: 25000
+  max_scan_file_bytes: 10000000
+  semgrep_timeout: 900
+  diff_excerpt_chars: 40000
+
+thresholds:
+  high_first_major: 5
+  rapid_versions_24h: 5
+  stale_gap_days: 180
+  large_size_increase_ratio: 3.0
+  young_account_days: 30
+  young_domain_days: 30
+  vt_file_min_detections: 3
+  vt_domain_min_detections: 5
+  new_dep_min_weekly_downloads: 100
+  new_dep_min_age_days: 30
+  popular_dep_weekly_downloads: 100000
+  many_new_deps: 5
+  many_env_vars: 10
+  code_replacement_ratio: 0.9
+  new_api_alert: 5
+  long_base64_chars: 1000
+  entropy_threshold: 5.2
+  minified_line_chars: 1000
+  typosquat_max_distance: 2
+
+network:
+  exfil_domains: [ngrok.io, ngrok-free.app, ngrok.app, webhook.site, pipedream.net, requestbin.com, requestbin.net,
+                  interact.sh, oast.fun, oast.me, oast.pro, oast.live, oast.site, oast.online, burpcollaborator.net,
+                  oastify.com, trycloudflare.com, serveo.net, localtunnel.me, loca.lt, beeceptor.com, hookbin.com,
+                  dnslog.cn, ceye.io, transfer.sh, file.io, pastebin.com, discord.com, discordapp.com, api.telegram.org,
+                  workers.dev, glitch.me, repl.co, ipinfo.io, ipify.org, ip-api.com, ifconfig.me]
+  shorteners: [bit.ly, tinyurl.com, t.co, goo.gl, is.gd, cutt.ly, rb.gy, shorturl.at, ow.ly, rebrand.ly, t.ly, s.id, v.gd]
+  free_hosting: [000webhostapp.com, freenom.com, duckdns.org, no-ip.org, ddns.net, hopto.org, zapto.org, sytes.net,
+                 serveo.net, ngrok.io, ngrok-free.app, glitch.me, repl.co, herokuapp.com, firebaseapp.com, web.app,
+                 netlify.app, vercel.app, pages.dev, workers.dev, github.io]
+  free_tlds: [tk, ml, ga, cf, gq, xyz, top, icu, buzz, monster, click, sbs, cfd]
+  legit_domains: [npmjs.org, npmjs.com, registry.npmjs.org, github.com, githubusercontent.com, gitlab.com, bitbucket.org,
+                  unpkg.com, jsdelivr.net, cdnjs.cloudflare.com, nodejs.org, pypi.org, pythonhosted.org, python.org,
+                  w3.org, mozilla.org, developer.mozilla.org, schema.org, json-schema.org, opensource.org, apache.org,
+                  microsoft.com, google.com, googleapis.com, amazonaws.com, readthedocs.io, readthedocs.org, example.com,
+                  localhost, yarnpkg.com, typescriptlang.org, ecma-international.org, wikipedia.org, stackoverflow.com]
+  nonstandard_ports_alert: [4444, 1337, 31337, 6666, 6667, 9001, 5555, 7777, 8888, 2222, 4443, 8443, 8080, 8081]
+
+llm:
+  enabled: true
+  command: claude
+  model: opus
+  timeout_seconds: 300
+  # If claude -p fails (authentication/usage limit, timeout, bad output) the package is treated as blocked.
+  fail_closed: true
+  # Skip the LLM when no producer emitted anything above `info`; the heuristic verdict is used.
+  skip_when_clean: true
+  max_prompt_chars: 180000
+  # Guard against prompt injection / LLM error: the LLM may lower the rule-based verdict by at most
+  # this many bands (critical -> high). It can always raise it.
+  max_downgrade_bands: 1
+  # "ecosystem:name" entries whose LLM verdict may override the rules fully (noisy but legitimate
+  # install-time behaviour, e.g. npm:puppeteer). They are still scanned and can still be blocked.
+  trusted_override_packages: []
+  reasoning_max_chars: 400
+
+verdict:
+  block_on: [high, critical]
+  # Minimum verdict forced by any `high_confidence` YARA match or known-IOC hit.
+  high_confidence_floor: high
+  ioc_floor: critical
+
+virustotal:
+  # Set VT_API_KEY in the environment to enable. Lookups are hash/domain only - nothing is uploaded.
+  max_file_lookups: 15
+  max_domain_lookups: 10

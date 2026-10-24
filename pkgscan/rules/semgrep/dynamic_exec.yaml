@@ -1,0 +1,176 @@
+# Signal 5.4 - Dynamic Code Execution Patterns
+rules:
+  - id: js-eval-dynamic
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: eval() on a non-literal value
+    metadata: {category: dynamic_exec, signal: "5.4"}
+    patterns:
+      - pattern: eval($X)
+      - pattern-not: eval("...")
+
+  - id: js-function-constructor
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Function constructor with dynamic body
+    metadata: {category: dynamic_exec, signal: "5.4"}
+    patterns:
+      - pattern-either:
+          - pattern: new Function(...)
+          - pattern: Function(...)
+      - pattern-not: Function("return this")
+      - pattern-not: new Function("return this")
+      - pattern-not: Function("...")
+      - pattern-not: new Function("...")
+
+  - id: js-vm-exec
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: vm module code execution
+    metadata: {category: dynamic_exec, signal: "5.4"}
+    pattern-either:
+      - pattern: vm.runInNewContext(...)
+      - pattern: vm.runInThisContext(...)
+      - pattern: vm.runInContext(...)
+      - pattern: new vm.Script(...)
+      - pattern: vm.compileFunction(...)
+      - pattern: require("vm").runInThisContext(...)
+      - pattern: require("vm").runInNewContext(...)
+
+  - id: js-remote-code-exec
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Network response flows into code execution (remote code execution)
+    metadata: {category: dynamic_exec, signal: "5.4", flow: network-to-exec, floor: high}
+    pattern-sources:
+      - pattern: fetch(...)
+      - pattern: axios.get(...)
+      - pattern: axios(...)
+      - patterns:
+          - pattern-inside: $R.on("data", ($D) => {...})
+          - pattern: $D
+      - patterns:
+          - pattern-inside: '$R.on("data", function ($D) {...})'
+          - pattern: $D
+      - patterns:
+          - pattern-inside: $H.get($U, ($RES) => {...})
+          - pattern: $RES
+      - patterns:
+          - pattern-inside: '$H.get($U, function ($RES) {...})'
+          - pattern: $RES
+    pattern-sinks:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: Function(...)
+      - pattern: vm.runInNewContext(...)
+      - pattern: vm.runInThisContext(...)
+      - pattern: new vm.Script(...)
+      - pattern: $M._compile(...)
+
+  - id: js-decoded-code-exec
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Decoded (base64/hex) data flows into code execution
+    metadata: {category: dynamic_exec, signal: "5.4", flow: decode-to-exec}
+    pattern-sources:
+      - pattern: atob(...)
+      - pattern: Buffer.from($X, "base64")
+      - pattern: Buffer.from($X, "hex")
+      - pattern: String.fromCharCode(...)
+    pattern-sinks:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: Function(...)
+      - pattern: vm.runInNewContext(...)
+      - pattern: vm.runInThisContext(...)
+      - pattern: $M._compile(...)
+
+  - id: js-dynamic-require
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: require()/import() with a computed module name
+    metadata: {category: dynamic_exec, signal: "5.4"}
+    pattern-either:
+      - pattern: require($A + $B)
+      - pattern: require(`...${$X}...`)
+      - pattern: require($A.join(...))
+      - pattern: require(atob(...))
+      - pattern: require(Buffer.from(...).toString())
+
+  - id: js-delayed-exec
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Code execution inside a timer (time-gated execution)
+    metadata: {category: dynamic_exec, signal: "5.4"}
+    patterns:
+      - pattern-either:
+          - pattern-inside: setTimeout(...)
+          - pattern-inside: setInterval(...)
+      - pattern-either:
+          - pattern: eval($X)
+          - pattern: new Function(...)
+          - pattern: require("child_process").$F(...)
+
+  - id: py-exec-dynamic
+    languages: [python]
+    severity: WARNING
+    message: exec()/eval()/compile() on a non-literal value
+    metadata: {category: dynamic_exec, signal: "5.4"}
+    patterns:
+      - pattern-either:
+          - pattern: exec($X, ...)
+          - pattern: eval($X, ...)
+          - pattern: compile($X, $F, "exec", ...)
+      - pattern-not: exec("...", ...)
+      - pattern-not: eval("...", ...)
+
+  - id: py-remote-code-exec
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: Network/decoded data flows into code execution
+    metadata: {category: dynamic_exec, signal: "5.4", flow: network-or-decode-to-exec}
+    pattern-sources:
+      - pattern: requests.get(...)
+      - pattern: urllib.request.urlopen(...)
+      - pattern: httpx.get(...)
+      - pattern: base64.b64decode(...)
+      - pattern: bytes.fromhex(...)
+      - pattern: zlib.decompress(...)
+      - pattern: codecs.decode(...)
+    pattern-sinks:
+      - pattern: exec(...)
+      - pattern: eval(...)
+      - pattern: compile(...)
+      - pattern: marshal.loads(...)
+      - pattern: pickle.loads(...)
+
+  - id: py-unsafe-deserialization
+    languages: [python]
+    severity: WARNING
+    message: Deserialization that can execute code
+    metadata: {category: dynamic_exec, signal: "5.4"}
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+      - pattern: marshal.loads(...)
+      - pattern: dill.loads(...)
+      - patterns:
+          - pattern: yaml.load(...)
+          - pattern-not: yaml.load(..., Loader=yaml.SafeLoader, ...)
+          - pattern-not: yaml.load(..., Loader=SafeLoader, ...)
+          - pattern-not: yaml.load(..., Loader=yaml.CSafeLoader, ...)
+
+  - id: py-dynamic-import
+    languages: [python]
+    severity: WARNING
+    message: __import__/import_module with a computed module name
+    metadata: {category: dynamic_exec, signal: "5.4"}
+    patterns:
+      - pattern-either:
+          - pattern: __import__($X, ...)
+          - pattern: importlib.import_module($X, ...)
+      - pattern-not: __import__("...", ...)
+      - pattern-not: importlib.import_module("...", ...)

@@ -1,0 +1,95 @@
+# Signal 5.5 - Crypto and Wallet Targeting
+rules:
+  - id: wallet-file-paths
+    languages: [regex]
+    severity: ERROR
+    message: References crypto wallet storage (extension IDs / wallet files)
+    metadata: {category: crypto_wallet, signal: "5.5"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?i)(?:nkbihfbeogaeaoehlefnkodbefgpgknn|bfnaelmomeimhlpmgjnjophhpkkoljpa|hnfanknocfeofbddgcijnmhnfnkdnaad|ibnejdfjmmkpcnlpebklmnkoeoihofec|fhbohimaelbohpjbbldcngcnapndodjp|egjidjbpglichdcondbcbdnbeeppgdph|Local Extension Settings|exodus\.wallet|Exodus[/\\\\]+exodus|electrum[/\\\\]+wallets|atomic[/\\\\]+Local Storage|\bwallet\.dat\b|\.ethereum[/\\\\]+keystore|solana[/\\\\]+id\.json|Coinbase Wallet|\.metamask)
+
+  - id: wallet-multi-target
+    languages: [regex]
+    severity: ERROR
+    message: Enumerates several wallet products by name
+    metadata: {category: crypto_wallet, signal: "5.5"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?i)(?:metamask|phantom|coinbase|exodus|trust ?wallet|ronin|keplr|tronlink|binance)["'\s,:\]\}]+[^\n]{0,200}?(?:metamask|phantom|coinbase|exodus|trust ?wallet|ronin|keplr|tronlink|binance)["'\s,:\]\}]+[^\n]{0,200}?(?:metamask|phantom|coinbase|exodus|trust ?wallet|ronin|keplr|tronlink|binance)
+
+  - id: seed-phrase-handling
+    languages: [regex]
+    severity: WARNING
+    message: Mnemonic / seed phrase / private key handling
+    metadata: {category: crypto_wallet, signal: "5.5"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*", "*.d.ts"]}
+    pattern-regex: (?i)(?:mnemonicToSeed|validateMnemonic|fromMnemonic|seed[ _-]?phrase|recovery[ _-]?phrase|secretRecoveryPhrase|privateKeyToAccount|fromSecretKey|Keypair\.fromSecretKey)
+
+  - id: hardcoded-eth-address
+    languages: [regex]
+    severity: INFO
+    message: Hardcoded Ethereum address literal
+    metadata: {category: crypto_wallet, signal: "5.5"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*", "*.d.ts", "*.json"]}
+    pattern-regex: '["''`]0x[a-fA-F0-9]{40}["''`]'
+
+  - id: hardcoded-btc-address
+    languages: [regex]
+    severity: INFO
+    message: Hardcoded Bitcoin address literal
+    metadata: {category: crypto_wallet, signal: "5.5"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*", "*.d.ts", "*.json"]}
+    pattern-regex: '["''`](?:bc1[ac-hj-np-z02-9]{25,59}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})["''`]'
+
+  - id: hardcoded-private-key
+    languages: [regex]
+    severity: WARNING
+    message: Possible hardcoded private key (64-hex / WIF)
+    metadata: {category: crypto_wallet, signal: "5.5"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*", "*.json", "*.lock"]}
+    pattern-regex: (?i)(?:priv(?:ate)?_?key|secret_?key|wif)\s*[:=]\s*["'`](?:0x)?(?:[a-f0-9]{64}|[5KL][1-9A-HJ-NP-Za-km-z]{50,51})["'`]
+
+  - id: address-regex-matching
+    languages: [regex]
+    severity: WARNING
+    message: Wallet-address regular expression (clipper malware precondition)
+    metadata: {category: crypto_wallet, signal: "5.5"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?:0x\[a-fA-F0-9\]\{40\}|\(bc1\|\[13\]\)|\[13\]\[a-km-zA-HJ-NP-Z1-9\]|bc1\[a-z0-9\])
+
+  - id: js-clipboard-access
+    languages: [javascript, typescript]
+    severity: INFO
+    message: Clipboard read/write
+    metadata: {category: crypto_wallet, signal: "5.5"}
+    pattern-either:
+      - pattern: navigator.clipboard.readText(...)
+      - pattern: navigator.clipboard.writeText(...)
+      - pattern: clipboardy.read(...)
+      - pattern: clipboardy.write(...)
+      - pattern: clipboardy.readSync(...)
+      - pattern: clipboardy.writeSync(...)
+
+  - id: shell-clipboard-access
+    languages: [regex]
+    severity: INFO
+    message: Clipboard via shell utilities
+    metadata: {category: crypto_wallet, signal: "5.5"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?:\bpbpaste\b|\bpbcopy\b|xclip\s+-o|xsel\s+--clipboard|Get-Clipboard|Set-Clipboard|pyperclip\.paste)
+
+  - id: js-tx-hook
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Overrides wallet provider / transaction-signing functions (transaction hijacking)
+    metadata: {category: crypto_wallet, signal: "5.5"}
+    pattern-either:
+      - pattern: window.ethereum.request = $F
+      - pattern: window.ethereum.send = $F
+      - pattern: window.ethereum.sendAsync = $F
+      - pattern: $W.eth.sendTransaction = $F
+      - pattern: $P.sendTransaction = $F
+      - pattern: $P.signTransaction = $F
+      - pattern: window.solana.signTransaction = $F
+      - pattern: window.fetch = $F
+      - pattern: XMLHttpRequest.prototype.open = $F
+      - pattern: XMLHttpRequest.prototype.send = $F

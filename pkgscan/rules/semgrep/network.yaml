@@ -1,0 +1,130 @@
+# Signal 5.2 - Network Behavior Patterns
+rules:
+  - id: js-outbound-request
+    languages: [javascript, typescript]
+    severity: INFO
+    message: Outbound network request
+    metadata: {category: network, signal: "5.2"}
+    pattern-either:
+      - pattern: fetch(...)
+      - pattern: axios.$M(...)
+      - pattern: require("https").request(...)
+      - pattern: require("http").request(...)
+      - pattern: require("https").get(...)
+      - pattern: require("http").get(...)
+      - pattern: https.request(...)
+      - pattern: http.request(...)
+      - pattern: https.get(...)
+      - pattern: http.get(...)
+      - pattern: new XMLHttpRequest()
+      - pattern: new WebSocket(...)
+      - pattern: net.connect(...)
+      - pattern: net.createConnection(...)
+      - pattern: new net.Socket()
+      - pattern: dgram.createSocket(...)
+
+  - id: js-http-post
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: HTTP POST/PUT request (possible data upload)
+    metadata: {category: network, signal: "5.2"}
+    pattern-either:
+      - pattern: 'fetch($U, {..., method: "POST", ...})'
+      - pattern: 'fetch($U, {..., method: "PUT", ...})'
+      - pattern: axios.post(...)
+      - pattern: axios.put(...)
+      - pattern: '$H.request({..., method: "POST", ...}, ...)'
+      - pattern: '$H.request($U, {..., method: "POST", ...}, ...)'
+
+  - id: js-credential-http-exfil
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Credential-like environment data flows into an HTTP POST body
+    metadata: {category: credential_access, signal: "5.2", flow: credential-to-network, floor: high}
+    pattern-sources:
+      - patterns:
+          - pattern: process.env.$KEY
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: '(?i).*(?:TOKEN|SECRET|PASSWORD|PRIVATE_KEY|CREDENTIAL).*'
+      - patterns:
+          - pattern: process.env[$KEY]
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: '(?i).*(?:TOKEN|SECRET|PASSWORD|PRIVATE_KEY|CREDENTIAL).*'
+    pattern-sinks:
+      - patterns:
+          - pattern: 'fetch($URL, {..., method: "POST", ..., body: $BODY, ...})'
+          - focus-metavariable: $BODY
+      - pattern: axios.post($URL, $BODY, ...)
+
+  - id: js-dns-query
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: DNS resolution API (possible DNS exfiltration)
+    metadata: {category: network, signal: "5.2"}
+    pattern-either:
+      - pattern: dns.lookup($A + $B, ...)
+      - pattern: dns.resolve($A + $B, ...)
+      - pattern: dns.resolveTxt(...)
+      - pattern: dns.promises.resolveTxt(...)
+
+  - id: py-outbound-request
+    languages: [python]
+    severity: INFO
+    message: Outbound network request
+    metadata: {category: network, signal: "5.2"}
+    pattern-either:
+      - pattern: requests.$M(...)
+      - pattern: httpx.$M(...)
+      - pattern: urllib.request.urlopen(...)
+      - pattern: urllib.request.urlretrieve(...)
+      - pattern: urllib.request.Request(...)
+      - pattern: http.client.HTTPConnection(...)
+      - pattern: http.client.HTTPSConnection(...)
+      - pattern: socket.socket(...)
+      - pattern: socket.create_connection(...)
+
+  - id: py-http-post
+    languages: [python]
+    severity: WARNING
+    message: HTTP POST/PUT request (possible data upload)
+    metadata: {category: network, signal: "5.2"}
+    pattern-either:
+      - pattern: requests.post(...)
+      - pattern: requests.put(...)
+      - pattern: httpx.post(...)
+      - pattern: urllib.request.Request(..., data=$D, ...)
+
+  - id: exfil-service-domain
+    languages: [regex]
+    severity: ERROR
+    message: Known anonymous exfiltration / tunnelling service
+    metadata: {category: network, signal: "5.2"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*", "*.d.ts"]}
+    pattern-regex: (?i)\b(?:[a-z0-9-]+\.)*(?:ngrok\.io|ngrok-free\.app|ngrok\.app|webhook\.site|pipedream\.net|requestbin\.(?:com|net)|interact\.sh|oast\.(?:fun|me|pro|live|site|online)|burpcollaborator\.net|oastify\.com|trycloudflare\.com|serveo\.net|localtunnel\.me|loca\.lt|beeceptor\.com|hookbin\.com|canarytokens\.com|dnslog\.cn|ceye\.io|transfer\.sh|file\.io|pastebin\.com/raw|discord(?:app)?\.com/api/webhooks|api\.telegram\.org/bot)
+
+  - id: url-shortener
+    languages: [regex]
+    severity: WARNING
+    message: URL shortener hides the real destination
+    metadata: {category: network, signal: "5.2"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?im)^(?!\s*(?://|/\*|\*|#))[^\n]*?https?://(?:bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly|rb\.gy|shorturl\.at|ow\.ly|rebrand\.ly|t\.ly|s\.id|v\.gd)/[A-Za-z0-9_-]+
+
+  - id: hardcoded-ip-url
+    languages: [regex]
+    severity: WARNING
+    message: URL pointing to a raw IP address
+    metadata: {category: network, signal: "5.2"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?i)(?:https?|wss?|tcp|ftp)://(?!127\.0\.0\.1|0\.0\.0\.0|localhost)(?:\d{1,3}\.){3}\d{1,3}(?::\d{2,5})?
+
+  - id: cloud-metadata-endpoint
+    languages: [regex]
+    severity: ERROR
+    message: Cloud instance metadata endpoint (credential theft from CI/cloud hosts)
+    metadata: {category: credential_access, signal: "5.2"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?:169\.254\.169\.254|metadata\.google\.internal|100\.100\.100\.200|fd00:ec2::254)

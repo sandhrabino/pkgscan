@@ -1,0 +1,140 @@
+# Signal 5.6 - Process and Command Execution
+rules:
+  - id: js-child-process
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Spawns a child process
+    metadata: {category: process_exec, signal: "5.6"}
+    patterns:
+      - pattern-either:
+          - pattern: require("child_process").$F(...)
+          - pattern: require("node:child_process").$F(...)
+          - patterns:
+              - pattern-inside: |
+                  $CP = require("child_process");
+                  ...
+              - pattern: $CP.$F(...)
+          - patterns:
+              - pattern-inside: |
+                  $CP = require("node:child_process");
+                  ...
+              - pattern: $CP.$F(...)
+          - patterns:
+              - pattern-inside: |
+                  import $CP from "child_process";
+                  ...
+              - pattern: $CP.$F(...)
+          - patterns:
+              - pattern-inside: |
+                  import * as $CP from "child_process";
+                  ...
+              - pattern: $CP.$F(...)
+          - patterns:
+              - pattern-inside: |
+                  import { ..., $F, ... } from "child_process";
+                  ...
+              - pattern: $F(...)
+          - patterns:
+              - pattern-inside: |
+                  const { ..., $F, ... } = require("child_process");
+                  ...
+              - pattern: $F(...)
+      - metavariable-regex:
+          metavariable: $F
+          regex: ^(exec|execSync|spawn|spawnSync|execFile|execFileSync|fork)$
+
+  - id: js-spawn-shell-true
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Process spawned through a shell
+    metadata: {category: process_exec, signal: "5.6"}
+    pattern-either:
+      - pattern: '$CP.spawn($C, $A, {..., shell: true, ...})'
+      - pattern: '$CP.spawnSync($C, $A, {..., shell: true, ...})'
+      - pattern: '$CP.execFile($C, $A, {..., shell: true, ...}, ...)'
+
+  - id: js-detached-process
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Detached background process (survives parent / hides activity)
+    metadata: {category: process_exec, signal: "5.6"}
+    pattern-either:
+      - pattern: '$CP.spawn($C, $A, {..., detached: true, ...})'
+      - pattern: '$CP.spawn($C, {..., detached: true, ...})'
+
+  - id: py-subprocess
+    languages: [python]
+    severity: WARNING
+    message: Spawns a child process
+    metadata: {category: process_exec, signal: "5.6"}
+    pattern-either:
+      - pattern: subprocess.$F(...)
+      - pattern: os.system(...)
+      - pattern: os.popen(...)
+      - pattern: os.spawnl(...)
+      - pattern: os.execv(...)
+      - pattern: os.execl(...)
+      - pattern: pty.spawn(...)
+
+  - id: py-subprocess-shell-true
+    languages: [python]
+    severity: WARNING
+    message: subprocess with shell=True
+    metadata: {category: process_exec, signal: "5.6"}
+    pattern: subprocess.$F(..., shell=True, ...)
+
+  - id: curl-pipe-shell
+    languages: [regex]
+    severity: ERROR
+    message: Remote script piped straight into a shell
+    metadata: {category: process_exec, signal: "5.6"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?i)(?:curl|wget|iwr|Invoke-WebRequest)\b[^\n|;]{0,300}\|\s*(?:sudo\s+)?(?:ba|z|da|k)?sh\b|(?:IEX|Invoke-Expression)\s*\(?\s*\(?\s*(?:New-Object\s+Net\.WebClient|iwr|Invoke-WebRequest)|DownloadString\(
+
+  - id: download-chmod-exec
+    languages: [regex]
+    severity: ERROR
+    message: Makes a file executable (download + chmod + execute chain)
+    metadata: {category: process_exec, signal: "5.6"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?:chmod\s+(?:\+x|[0-7]?7[0-7]{2})\s+\S+|chmodSync\([^)]*,\s*0o?7[0-7]{2}\)|os\.chmod\([^)]*,\s*0o?7[0-7]{2}\))
+
+  - id: dev-tcp-udp
+    languages: [regex]
+    severity: ERROR
+    message: Raw /dev/tcp or /dev/udp socket (stealthy network channel)
+    metadata: {category: process_exec, signal: "5.6"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: /dev/(?:tcp|udp)/
+
+  - id: powershell-encoded
+    languages: [regex]
+    severity: ERROR
+    message: PowerShell encoded/hidden command
+    metadata: {category: process_exec, signal: "5.6"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?i)powershell(?:\.exe)?[^\n]{0,100}?(?:-e(?:nc|ncodedcommand)?\s+[A-Za-z0-9+/=]{16,}|-w(?:indowstyle)?\s+hidden|-nop\b|-exec(?:utionpolicy)?\s+bypass)
+
+  - id: windows-lolbins
+    languages: [regex]
+    severity: ERROR
+    message: Windows living-off-the-land binaries / service or registry tampering
+    metadata: {category: process_exec, signal: "5.6"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?i)\b(?:certutil(?:\.exe)?\s+-urlcache|bitsadmin(?:\.exe)?\s+/transfer|mshta(?:\.exe)?\s+http|rundll32(?:\.exe)?\s+\S+,|regsvr32(?:\.exe)?\s+/s|installutil(?:\.exe)?|sc(?:\.exe)?\s+(?:create|config)\s|reg(?:\.exe)?\s+add\s|regedit(?:\.exe)?\s+/s)
+
+  - id: process-enumeration
+    languages: [regex]
+    severity: INFO
+    message: Process / host enumeration
+    metadata: {category: process_exec, signal: "5.6"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?i)(?:\btasklist\b|\bps\s+(?:aux|-ef)\b|Get-Process\b|wmic\s+process|\bwhoami\b|\bsysteminfo\b|\buname\s+-a\b)
+
+  - id: worm-propagation
+    languages: [regex]
+    severity: ERROR
+    message: Publishes packages or pushes to repos from package code (worm propagation)
+    metadata: {category: process_exec, signal: "5.6"}
+    paths: {exclude: ["*.md", "*.markdown", "*.rst", "*.txt", "LICENSE*", "CHANGELOG*"]}
+    pattern-regex: (?i)(?:\b(?:exec|execSync|spawn|spawnSync|execFile|execFileSync|execa)\s*\([^\n;]{0,300}\b(?:npm\s+publish|npm\s+version\s+patch|twine\s+upload)\b|api\.github\.com/user/repos|/repos/[^"'`\s]*/actions/secrets|\bgit\s+push\s+(?:-f|--force|origin))

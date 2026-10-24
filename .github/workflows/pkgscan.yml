@@ -1,0 +1,102 @@
+# Copy into each repository to protect, then make "pkgscan / scan" a REQUIRED status check
+# (Settings -> Branches/Rulesets). Better still, enforce it as an org-level required workflow so a PR
+# cannot edit this file to skip the check.
+#
+# Deliberately uses `pull_request` (not `pull_request_target`): PR code never runs with secrets or write
+# tokens (the Shai-Hulud / GhostAction lesson). Note: fork PRs get no secrets, so the LLM step fails
+# closed and those PRs are blocked until a maintainer re-runs the scan.
+name: pkgscan
+
+on:
+  pull_request:          # no `paths:` filter - a required check that never reports would block every PR
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pkgscan-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PKGSCAN_REF: v0.1.0                       # pin the scanner to a tag/commit
+  PKGSCAN_REPO: your-org/npm-malscanner      # where this scanner lives
+
+jobs:
+  scan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout project (PR head + base history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout scanner (pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PKGSCAN_REPO }}
+          ref: ${{ env.PKGSCAN_REF }}
+          path: .pkgscan-tool
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install scanner, Semgrep and Claude Code
+        run: |
+          python -m pip install --quiet ./.pkgscan-tool semgrep
+          npm install -g --ignore-scripts @anthropic-ai/claude-code
+
+      - name: Scan dependency changes
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        # Exit code 1 = a high/critical verdict (or LLM failure with fail_closed) -> check fails -> merge blocked.
+        run: pkgscan repo . --base-ref "origin/${{ github.base_ref }}" --out pkgscan-output
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkgscan-output
+          path: pkgscan-output/
+          retention-days: 30
+
+  # After merge: record the now-approved dependency versions so the next PR is diffed against them.
+  record-state:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PKGSCAN_REPO }}
+          ref: ${{ env.PKGSCAN_REF }}
+          path: .pkgscan-tool
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --quiet ./.pkgscan-tool
+      - name: Update and commit .pkgscan/state.json
+        run: |
+          pkgscan update-state .
+          if ! git diff --quiet -- .pkgscan/state.json || [ -n "$(git status --porcelain .pkgscan)" ]; then
+            git config user.name "pkgscan-bot"
+            git config user.email "pkgscan-bot@users.noreply.github.com"
+            git add .pkgscan/state.json
+            git commit -m "chore(pkgscan): record scanned dependency versions [skip ci]"
+            git push
+          fi
